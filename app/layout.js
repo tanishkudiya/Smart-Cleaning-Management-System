@@ -6,50 +6,65 @@ import Header from "@/components/header";
 import { useState, useEffect } from "react";
 import { Toaster } from "react-hot-toast";
 import Sidebar from "@/components/Sidebar";
+import Footer from "@/components/footer";
+import Script from "next/script";
+import { getUserByEmail } from "@/utils/db/actions";
+import { getAvailableRewards } from "@/utils/db/actions";
+
 
 const inter = Inter({ subsets: ["latin"] });
 
 export default function RootLayout({ children }) {
-  const [sidebarOpen, setSidebarOpen] = useState(true); // default true on large screens
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [totalEarnings, setTotalEarnings] = useState(0)
 
-  // Optional: sync sidebarOpen state with screen size (so it opens by default on large screens)
   useEffect(() => {
-    function handleResize() {
-      if (window.innerWidth >= 1024) {
-        setSidebarOpen(true);
-      } else {
-        setSidebarOpen(false);
+    const fetchTotalEarnings = async () => {
+      try {
+        const userEmail = localStorage.getItem('userEmail')
+        if (userEmail) {
+          const user = await getUserByEmail(userEmail)
+          console.log('user from layout', user)
+
+          if (user) {
+            const availableRewards = await getAvailableRewards(user.id)
+            console.log('availableRewards from layout', availableRewards)
+            setTotalEarnings(availableRewards)
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching total earnings:', error)
       }
     }
 
-    handleResize(); // initialize on mount
-    window.addEventListener("resize", handleResize);
-
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
-
-  useEffect(() => {
-    console.log("Sidebar Open:", sidebarOpen);
-  }, [sidebarOpen]);
+    fetchTotalEarnings()
+  }, [])
 
   return (
     <html lang="en">
+      <head><Script
+          src={`https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`}
+          strategy="beforeInteractive"
+        /></head>
       <body className={inter.className}>
         <div className="min-h-screen bg-gray-50 flex flex-col">
+          {/* Header */}
           <Header onMenuClick={() => setSidebarOpen((prev) => !prev)} />
 
-          <div className="flex flex-1 relative">
-            <Sidebar open={sidebarOpen} setOpen={setSidebarOpen} />
+          {/* Content Section */}
+          <div className="flex flex-1">
+            {/* Sidebar */}
+            <Sidebar open={sidebarOpen} setOpen={setSidebarOpen}/>
 
-            <main className="flex-1 p-4 lg:p-8 ml-0 lg:ml-64 transition-all duration-300">
-              {children}
-            </main>
-
+            {/* Main Content + Footer */}
+            <div className="flex flex-col flex-1 min-h-screen ml-0 lg:ml-64">
+              <main className="flex-1 min-h-screen p-4 lg:p-8">{children}</main>
+              <Footer />
+            </div>
           </div>
         </div>
         <Toaster />
       </body>
     </html>
   );
-
 }

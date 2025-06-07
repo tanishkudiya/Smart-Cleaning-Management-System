@@ -3,6 +3,7 @@ import { usePathname } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { MapPin, Trash, Coins, Medal, Settings, Home } from "lucide-react";
 import { useEffect } from "react";
+import AnimatedDustbin from "./AnimatedDustbin";
 
 const sidebarItems = [
   { href: "/", icon: Home, label: "Home" },
@@ -10,6 +11,8 @@ const sidebarItems = [
   { href: "/collect", icon: Trash, label: "Collect Waste" },
   { href: "/rewards", icon: Coins, label: "Rewards" },
   { href: "/leaderboard", icon: Medal, label: "Leaderboard" },
+  { href: "/vendors", icon: Medal, label: "Vendor Management" },
+  { href: "/admin", icon: Medal, label: "Admin" },
 ];
 
 export default function Sidebar({ open }) {
@@ -35,6 +38,9 @@ export default function Sidebar({ open }) {
               </Button>
             </Link>
           ))}
+        </div>
+        <div>
+          <AnimatedDustbin/>
         </div>
         <div className="p-4 border-t border-gray-200">
           <Link href="/settings">
