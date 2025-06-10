@@ -12,6 +12,7 @@ import {
   getUserBalance,
   markNotificationAsRead,
   saveVendorConfidentialInfo,
+  getStaffByEmail,
 } from '@/utils/db/actions';
 import { Button } from './ui/button';
 import {
@@ -63,6 +64,7 @@ export default function Header({ onMenuClick, totalEarnings }) {
   const [selectedRole, setSelectedRole] = useState('user'); // default to 'user'
   const [showRoleSelect, setShowRoleSelect] = useState(false);
   const [showVendorInfoForm, setShowVendorInfoForm] = useState(false);
+  const [vendorFormLoading, setVendorFormLoading] = useState(false);
 
   // Vendor info form state
   const [vendorInfo, setVendorInfo] = useState({
@@ -74,7 +76,6 @@ export default function Header({ onMenuClick, totalEarnings }) {
     address: '',
   });
 
-
   // Sync vendorInfo.email with userInfo.email once userInfo is loaded
   useEffect(() => {
     if (userInfo?.email) {
@@ -82,6 +83,7 @@ export default function Header({ onMenuClick, totalEarnings }) {
     }
   }, [userInfo?.email]);
 
+  // Initialize Web3Auth and check if user is already logged in
   useEffect(() => {
     const init = async () => {
       try {
@@ -94,29 +96,44 @@ export default function Header({ onMenuClick, totalEarnings }) {
         await web3auth.init();
         web3authRef.current = web3auth;
 
+        let user = null;
         if (web3auth.provider) {
           setProvider(web3auth.provider);
-          setLoggedIn(true);
+          user = await web3auth.getUserInfo();
+        } else {
+          // fallback localStorage
+          const email = localStorage.getItem('userEmail');
+          if (email) {
+            // fetch user or staff by email
+            const existingUser = await getUserByEmail(email);
+            const existingStaff = await getStaffByEmail(email);
 
-          const user = await web3auth.getUserInfo();
+            if (existingUser) {
+              setLoggedIn(true);
+              setUserInfo(existingUser);
+              setLoading(false);
+              return; // stop here, already logged in
+            }
+            if (existingStaff) {
+              setLoggedIn(true);
+              setUserInfo(existingStaff);
+              setLoading(false);
+              return; // stop here, already logged in
+            }
+          }
+        }
+
+        if (user) {
           setUserInfo(user);
-
           if (user.email) {
             localStorage.setItem('userEmail', user.email);
             const existingUser = await getUserByEmail(user.email);
-            if (!existingUser) {
-              setShowRoleSelect(true);
-            }
-          }
-        } else {
-          // If no provider but email in localStorage, try to fetch user from DB
-          const email = localStorage.getItem('userEmail');
-          if (email) {
-            const existingUser = await getUserByEmail(email);
-            if (existingUser) {
+            const existingStaff = await getStaffByEmail(user.email);
+
+            if (existingUser || existingStaff) {
               setLoggedIn(true);
-              setUserInfo({ email, name: existingUser.name || email });
             } else {
+              // show role select only if no user or staff found
               setShowRoleSelect(true);
             }
           }
@@ -131,7 +148,7 @@ export default function Header({ onMenuClick, totalEarnings }) {
     init();
   }, []);
 
-  // Fetch notifications on userInfo change
+  // Fetch notifications on userInfo change and poll every 30 seconds
   useEffect(() => {
     const fetchNotifications = async () => {
       if (userInfo?.email) {
@@ -162,7 +179,7 @@ export default function Header({ onMenuClick, totalEarnings }) {
 
     fetchUserBalance();
 
-    // Event listener for balance updates (custom event)
+    // Listen for custom balanceUpdated event
     const handleBalanceUpdate = (event) => {
       setBalance(event.detail);
     };
@@ -171,6 +188,7 @@ export default function Header({ onMenuClick, totalEarnings }) {
     return () => window.removeEventListener('balanceUpdated', handleBalanceUpdate);
   }, [userInfo]);
 
+  // Login flow with Web3Auth
   const login = async () => {
     const web3auth = web3authRef.current;
     if (!web3auth) return;
@@ -184,11 +202,14 @@ export default function Header({ onMenuClick, totalEarnings }) {
 
       if (user.email) {
         localStorage.setItem('userEmail', user.email);
+
         const existingUser = await getUserByEmail(user.email);
-        if (!existingUser) {
-          setShowRoleSelect(true);
-        } else {
+        const existingStaff = await getStaffByEmail(user.email);
+
+        if (existingUser || existingStaff) {
           setLoggedIn(true);
+        } else {
+          setShowRoleSelect(true);
         }
       }
     } catch (error) {
@@ -196,6 +217,7 @@ export default function Header({ onMenuClick, totalEarnings }) {
     }
   };
 
+  // Logout flow
   const logout = async () => {
     const web3auth = web3authRef.current;
     if (!web3auth) return;
@@ -212,7 +234,7 @@ export default function Header({ onMenuClick, totalEarnings }) {
     }
   };
 
-  // Called when user confirms their role on modal
+  // Confirm role selection and create user
   const handleRoleConfirm = async () => {
     if (!userInfo?.email) return;
 
@@ -231,13 +253,32 @@ export default function Header({ onMenuClick, totalEarnings }) {
     }
   };
 
+  // Handle vendor info input change
   const handleVendorInfoChange = (e) => {
-  const { name, value } = e.target;
-  setVendorInfo(prev => ({ ...prev, [name]: value }));
-};
+    const { name, value } = e.target;
+    setVendorInfo((prev) => ({ ...prev, [name]: value }));
+  };
 
+  // Simple validation before submitting vendor info
+  const validateVendorInfo = () => {
+    if (
+      !vendorInfo.name.trim() ||
+      !vendorInfo.company.trim() ||
+      !vendorInfo.idNumber.trim() ||
+      !vendorInfo.licenseNumber.trim() ||
+      !vendorInfo.address.trim()
+    ) {
+      alert('Please fill all vendor fields');
+      return false;
+    }
+    return true;
+  };
 
+  // Submit vendor confidential info
   const handleVendorInfoSubmit = async () => {
+    if (!validateVendorInfo()) return;
+
+    setVendorFormLoading(true);
     try {
       await saveVendorConfidentialInfo({
         userEmail: userInfo.email,
@@ -247,9 +288,13 @@ export default function Header({ onMenuClick, totalEarnings }) {
       setLoggedIn(true);
     } catch (error) {
       console.error('Error saving vendor confidential info:', error);
+      alert('Failed to save vendor info. Please try again.');
+    } finally {
+      setVendorFormLoading(false);
     }
   };
 
+  // Mark notification as read
   const handleNotificationClick = async (notificationId) => {
     await markNotificationAsRead(notificationId);
     setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
@@ -409,6 +454,7 @@ export default function Header({ onMenuClick, totalEarnings }) {
               onChange={handleVendorInfoChange}
               placeholder="Name"
               className="w-full p-2 border border-gray-300 rounded mb-3"
+              disabled={vendorFormLoading}
             />
             <input
               name="email"
@@ -422,6 +468,7 @@ export default function Header({ onMenuClick, totalEarnings }) {
               onChange={handleVendorInfoChange}
               placeholder="Company Name"
               className="w-full p-2 border border-gray-300 rounded mb-3"
+              disabled={vendorFormLoading}
             />
             <input
               name="idNumber"
@@ -429,6 +476,7 @@ export default function Header({ onMenuClick, totalEarnings }) {
               onChange={handleVendorInfoChange}
               placeholder="ID Number"
               className="w-full p-2 border border-gray-300 rounded mb-3"
+              disabled={vendorFormLoading}
             />
             <input
               name="licenseNumber"
@@ -436,6 +484,7 @@ export default function Header({ onMenuClick, totalEarnings }) {
               onChange={handleVendorInfoChange}
               placeholder="License Number"
               className="w-full p-2 border border-gray-300 rounded mb-3"
+              disabled={vendorFormLoading}
             />
             <input
               name="address"
@@ -443,18 +492,20 @@ export default function Header({ onMenuClick, totalEarnings }) {
               onChange={handleVendorInfoChange}
               placeholder="Address"
               className="w-full p-2 border border-gray-300 rounded mb-3"
+              disabled={vendorFormLoading}
             />
 
             <div className="flex justify-end space-x-2">
-              <Button variant="outline" onClick={() => setShowVendorInfoForm(false)}>
+              <Button variant="outline" onClick={() => setShowVendorInfoForm(false)} disabled={vendorFormLoading}>
                 Cancel
               </Button>
-              <Button onClick={handleVendorInfoSubmit}>Submit</Button>
+              <Button onClick={handleVendorInfoSubmit} disabled={vendorFormLoading}>
+                {vendorFormLoading ? 'Submitting...' : 'Submit'}
+              </Button>
             </div>
           </div>
         </div>
       )}
-
     </>
   );
 }

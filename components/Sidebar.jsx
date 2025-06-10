@@ -13,6 +13,7 @@ const sidebarItems = [
   { href: "/leaderboard", icon: Medal, label: "Leaderboard" },
   { href: "/vendors", icon: Medal, label: "Vendor Management" },
   { href: "/admin", icon: Medal, label: "Admin" },
+  { href: "/staff", icon: Medal, label: "Staff" },
 ];
 
 export default function Sidebar({ open }) {

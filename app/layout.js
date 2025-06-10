@@ -18,6 +18,13 @@ export default function RootLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [totalEarnings, setTotalEarnings] = useState(0)
 
+   useEffect(() => {
+    const userId = localStorage.getItem('userId');
+    if (userId) {
+      console.log('User ID from localStorage:', userId);
+    }
+  }, []);
+
   useEffect(() => {
     const fetchTotalEarnings = async () => {
       try {

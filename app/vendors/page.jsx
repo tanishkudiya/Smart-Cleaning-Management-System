@@ -23,6 +23,41 @@ export default function VendorPage() {
   const [successMessage, setSuccessMessage] = useState('')
   const router = useRouter()
 
+  const handleAssignTask = async () => {
+    if (!selectedStaffId || !selectedComplaintId) {
+      alert('Please select both staff and complaint');
+      return;
+    }
+
+    console.log('Assigning:', {
+      staffId: selectedStaffId,
+      reportId: selectedComplaintId,
+      vendorId: vendor.id,
+    });
+
+
+    try {
+      await assignTaskToStaff({
+        staffId: selectedStaffId,
+        reportId: selectedComplaintId,
+        vendorId: vendor.id,
+      });
+
+      setSuccessMessage('Task assigned successfully!');
+      // Remove the assigned complaint from dropdown
+      setPendingComplaints(prev =>
+        prev.filter(c => c.id !== selectedComplaintId)
+      );
+
+      setSelectedComplaintId('');
+      setSelectedStaffId('');
+    } catch (error) {
+      console.error(error);
+      alert('Failed to assign task');
+    }
+  };
+
+
   // Load Vendor Info + Staff + Unassigned Complaints
   useEffect(() => {
     async function fetchVendorData() {
@@ -170,7 +205,7 @@ export default function VendorPage() {
               </select>
 
               <button
-                // onClick={handleAssignTask}
+                onClick={handleAssignTask}
                 className="bg-blue-600 text-white px-5 py-2 rounded hover:bg-blue-700"
               >
                 Assign

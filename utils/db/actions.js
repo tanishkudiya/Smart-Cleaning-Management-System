@@ -8,8 +8,129 @@ import {
   Notifications,
   staff,
   Transactions,
+  AssignedTasks,
+  tasks
 } from './schema';
 import { eq, sql, and, desc } from 'drizzle-orm';
+
+export async function getCompletedTasksByUserId(userId) {
+  if (!userId) throw new Error("Invalid userId");
+
+  const completedTasks = await db
+    .select()
+    .from(tasks)
+    .where(
+      and(
+        eq(tasks.user_id, userId),       // userId ke column name ko check karo apne table me
+        eq(tasks.status, 'completed')
+      )
+    );
+
+  return completedTasks;
+}
+
+
+export async function verifyTaskById(taskId) {
+  if (!taskId) throw new Error('Invalid taskId');
+
+  // Step 1: Find report id related to the task
+  const task = await db
+    .select()
+    .from(AssignedTasks)
+    .where(eq(AssignedTasks.id, taskId))
+    .limit(1);
+
+  if (task.length === 0) {
+    throw new Error('Task not found');
+  }
+
+  const reportId = task[0].report_id;  // assuming assigned_tasks has report_id column
+
+  // Step 2: Update assigned_tasks status
+  const updatedTask = await db
+    .update(AssignedTasks)
+    .set({ status: 'completed' })
+    .where(eq(AssignedTasks.id, taskId))
+    .returning();
+
+  if (updatedTask.length === 0) {
+    throw new Error('Failed to update task status');
+  }
+
+  // Step 3: Update related report status
+  const updatedReport = await db
+    .update(Reports)
+    .set({ status: 'completed' })
+    .where(eq(Reports.id, reportId))
+    .returning();
+
+  if (updatedReport.length === 0) {
+    throw new Error('Failed to update report status');
+  }
+
+  return true;
+}
+
+
+export async function updateTaskVerification({ taskId, vendorId, location, imageUrl }) {
+  try {
+    const [updated] = await db
+      .update(AssignedTasks)
+      .set({
+        vendor_id: vendorId,
+        location,
+        imageUrl,
+        status: 'verified',
+      })
+      .where(eq(AssignedTasks.id, taskId))
+      .returning()
+      .execute();
+
+    return updated;
+  } catch (err) {
+    console.error('DB error:', err);
+    return null;
+  }
+}
+
+export async function getAssignedTasksForStaff(staffId) {
+  return await db
+    .select({
+      taskId: AssignedTasks.id,
+      report: Reports,
+    })
+    .from(AssignedTasks)
+    .innerJoin(Reports, eq(Reports.id, AssignedTasks.report_id))
+    .where(eq(AssignedTasks.staff_id, staffId))
+}
+
+export async function getTasksByStaffId(staffId) {
+  if (!staffId) return [];
+
+  try {
+    const tasks = await db
+      .select({
+        taskId: AssignedTasks.id,
+        reportId: Reports.id,
+        location: Reports.location,
+        wasteType: Reports.wasteType,
+        amount: Reports.amount,
+        imageUrl: Reports.imageUrl,
+        verificationResult: Reports.verificationResult,
+        reportStatus: Reports.status,
+        assignedAt: AssignedTasks.assigned_at,
+        taskStatus: AssignedTasks.status,
+      })
+      .from(AssignedTasks)
+      .innerJoin(Reports, eq(AssignedTasks.report_id, Reports.id))
+      .where(eq(AssignedTasks.staff_id, staffId)); // ✅ use `staff_id` from schema
+
+    return tasks;
+  } catch (error) {
+    console.error('❌ Error fetching tasks for staff:', error);
+    return [];
+  }
+}
 
 export async function createStaff(data) {
   try {
@@ -23,6 +144,32 @@ export async function createStaff(data) {
   } catch (error) {
     console.error('Error creating staff:', error);
     throw error;
+  }
+}
+
+export async function assignTaskToStaff({ staffId, reportId, vendorId }) {
+  if (!staffId || !reportId || !vendorId) {
+    throw new Error("Missing required fields")
+  }
+
+  try {
+    await db.insert(AssignedTasks).values({
+      staff_id: staffId,    // ✅ DO NOT CONVERT TO NUMBER
+      report_id: reportId,
+      vendor_id: vendorId,
+      // assigned_at is auto-filled
+      // status defaults to 'assigned'
+    })
+
+    await db
+  .update(Reports)
+  .set({ status: 'assigned' })
+  .where(eq(Reports.id, reportId));
+
+
+  } catch (err) {
+    console.error("Error assigning task to staff:", err)
+    throw new Error("Assignment failed")
   }
 }
 
@@ -63,6 +210,24 @@ export async function getStaffByVendorId(vendorId) {
   } catch (error) {
     console.error('Error fetching staff by vendorId:', error);
     return [];
+  }
+}
+
+export async function getStaffByEmail(email) {
+  if (!email) return null;
+
+  try {
+    const result = await db
+      .select()
+      .from(staff)
+      .where(eq(staff.email, email))
+      .limit(1);
+
+    if (result.length === 0) return null;
+    return result[0];
+  } catch (error) {
+    console.error("Error fetching staff by email:", error);
+    throw error;
   }
 }
 

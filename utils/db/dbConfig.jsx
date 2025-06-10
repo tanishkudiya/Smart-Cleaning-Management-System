@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/neon-http";
 import * as schema from "./schema";
 
 // Make sure this code runs only on the server
-const databaseUrl = "postgresql://Management:npg_ITSQZ2NLOB3w@ep-holy-base-a88q73dh-pooler.eastus2.azure.neon.tech/System?sslmode=require";
+const databaseUrl = "postgresql://Smart:npg_dohcID5B1pmM@ep-wispy-recipe-a8qh8se6-pooler.eastus2.azure.neon.tech/cleaning%20system?sslmode=require";
 
 if (!databaseUrl) {
   throw new Error("DATABASE_URL is not defined. Please set it in your .env.local file.");
