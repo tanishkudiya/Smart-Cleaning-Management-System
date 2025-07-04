@@ -21,63 +21,45 @@ export default function VendorPage() {
   const [selectedStaffId, setSelectedStaffId] = useState('')
   const [selectedComplaintId, setSelectedComplaintId] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
+  const [modalComplaint, setModalComplaint] = useState(null)
   const router = useRouter()
 
   const handleAssignTask = async () => {
     if (!selectedStaffId || !selectedComplaintId) {
-      alert('Please select both staff and complaint');
-      return;
+      alert('Please select both staff and complaint')
+      return
     }
-
-    console.log('Assigning:', {
-      staffId: selectedStaffId,
-      reportId: selectedComplaintId,
-      vendorId: vendor.id,
-    });
-
 
     try {
       await assignTaskToStaff({
         staffId: selectedStaffId,
         reportId: selectedComplaintId,
         vendorId: vendor.id,
-      });
+      })
 
-      setSuccessMessage('Task assigned successfully!');
-      // Remove the assigned complaint from dropdown
+      setSuccessMessage('Task assigned successfully!')
       setPendingComplaints(prev =>
         prev.filter(c => c.id !== selectedComplaintId)
-      );
+      )
 
-      setSelectedComplaintId('');
-      setSelectedStaffId('');
+      setSelectedComplaintId('')
+      setSelectedStaffId('')
     } catch (error) {
-      console.error(error);
-      alert('Failed to assign task');
+      console.error(error)
+      alert('Failed to assign task')
     }
-  };
+  }
 
-
-  // Load Vendor Info + Staff + Unassigned Complaints
   useEffect(() => {
     async function fetchVendorData() {
       const email = localStorage.getItem('userEmail')
-      if (!email) {
-        router.push('/')
-        return
-      }
+      if (!email) return router.push('/')
 
       const user = await getUserByEmail(email)
-      if (!user || user.role !== 'vendor') {
-        router.push('/')
-        return
-      }
+      if (!user || user.role !== 'vendor') return router.push('/')
 
       const vendorData = await getVendorByUserId(user.id)
-      if (!vendorData || vendorData.status !== 'active') {
-        router.push('/')
-        return
-      }
+      if (!vendorData || vendorData.status !== 'active') return router.push('/')
 
       setVendor(vendorData)
 
@@ -94,7 +76,6 @@ export default function VendorPage() {
     fetchVendorData()
   }, [router])
 
-  // Add New Staff
   const handleStaffSubmit = async e => {
     e.preventDefault()
     if (staffList.some(s => s.email === newStaff.email)) {
@@ -122,7 +103,6 @@ export default function VendorPage() {
     }
   }
 
-  // Delete Staff
   const handleDeleteStaff = async id => {
     try {
       await deleteStaff(id)
@@ -178,38 +158,52 @@ export default function VendorPage() {
                 : 'No pending complaints to assign.'}
             </p>
           ) : (
-            <div className="flex space-x-4 items-center flex-wrap gap-y-2">
-              <select
-                value={selectedStaffId}
-                onChange={e => setSelectedStaffId(e.target.value)}
-                className="border px-3 py-2 rounded"
-              >
-                <option value="">Select Staff</option>
-                {staffList.map(staff => (
-                  <option key={staff.id} value={staff.id}>
-                    {staff.name} ({staff.email})
-                  </option>
-                ))}
-              </select>
-              <select
-                value={selectedComplaintId}
-                onChange={e => setSelectedComplaintId(e.target.value)}
-                className="border px-3 py-2 rounded"
-              >
-                <option value="">Select Complaint</option>
-                {pendingComplaints.map(complaint => (
-                  <option key={complaint.id} value={complaint.id}>
-                    {complaint.amount} - {complaint.location}
-                  </option>
-                ))}
-              </select>
+            <div className="flex flex-col lg:flex-row lg:space-x-4 gap-y-3 items-start">
+              <div className="w-full lg:w-1/2">
+                <label className="block mb-1 font-medium">Select Staff</label>
+                <select
+                  value={selectedStaffId}
+                  onChange={e => setSelectedStaffId(e.target.value)}
+                  className="w-full border px-3 py-2 rounded"
+                >
+                  <option value="">Select Staff</option>
+                  {staffList.map(staff => (
+                    <option key={staff.id} value={staff.id}>
+                      {staff.name} ({staff.email})
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-              <button
-                onClick={handleAssignTask}
-                className="bg-blue-600 text-white px-5 py-2 rounded hover:bg-blue-700"
-              >
-                Assign
-              </button>
+              <div className="w-full lg:w-1/2">
+                <label className="block mb-1 font-medium">Select Complaint</label>
+                <select
+                  value={selectedComplaintId}
+                  onChange={(e) => {
+                    const selectedId = e.target.value;
+                    setSelectedComplaintId(selectedId);
+                    const found = pendingComplaints.find(c => c.id === selectedId);
+                    setModalComplaint(found);
+                  }}
+                  className="w-full border px-3 py-2 rounded"
+                >
+                  <option value="">Select Complaint</option>
+                  {pendingComplaints.map(complaint => (
+                    <option key={complaint.id} value={complaint.id}>
+                      {`ID: ${complaint.id.slice(0, 8)}... | ${complaint.amount} kg`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  onClick={handleAssignTask}
+                  className="bg-blue-600 text-white px-5 py-2 rounded hover:bg-blue-700"
+                >
+                  Assign
+                </button>
+              </div>
             </div>
           )}
         </section>
@@ -223,6 +217,7 @@ export default function VendorPage() {
             <table className="w-full min-w-[800px] text-left border rounded overflow-hidden">
               <thead className="bg-gray-100">
                 <tr>
+                  <th className="px-4 py-2 border">Staff ID</th>
                   <th className="px-4 py-2 border">Name</th>
                   <th className="px-4 py-2 border">Email</th>
                   <th className="px-4 py-2 border">Phone</th>
@@ -233,12 +228,22 @@ export default function VendorPage() {
               <tbody>
                 {staffList.map(staff => (
                   <tr key={staff.id} className="border-t hover:bg-gray-50">
+                    <td className="px-4 py-2 border">
+                      {staff.id ? staff.id.slice(-6) : '-'}
+                    </td>
                     <td className="px-4 py-2 border">{staff.name}</td>
                     <td className="px-4 py-2 border">{staff.email}</td>
                     <td className="px-4 py-2 border">{staff.phone || '-'}</td>
                     <td className="px-4 py-2 border">
                       {staff.created_at
-                        ? new Date(staff.created_at).toLocaleString()
+                        ? new Date(staff.created_at).toLocaleString('en-GB', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: true,
+                          })
                         : '-'}
                     </td>
                     <td className="px-4 py-2 border">
@@ -255,6 +260,41 @@ export default function VendorPage() {
             </table>
           )}
         </section>
+
+        {/* Complaint Modal */}
+        {modalComplaint && (
+          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded max-w-md w-full mx-4 shadow-lg relative">
+              <button
+                onClick={() => setModalComplaint(null)}
+                className="absolute top-2 right-3 text-gray-500 hover:text-black"
+              >
+                ✖
+              </button>
+              <h3 className="text-xl font-semibold mb-3">Complaint Details</h3>
+              <p><strong>ID:</strong> {modalComplaint.id}</p>
+              <p><strong>Weight:</strong> {modalComplaint.amount}</p>
+              <p><strong>Location:</strong> {modalComplaint.location}</p>
+
+              {modalComplaint.image_url ? (
+                <img
+                  src={modalComplaint.image_url}
+                  alt="Complaint Image"
+                  className="w-full h-60 object-cover rounded border mt-2"
+                />
+              ) : (
+                <p className="text-gray-500 mt-2">No image available</p>
+              )}
+
+              <button
+                className="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                onClick={() => setModalComplaint(null)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

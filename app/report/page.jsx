@@ -8,6 +8,7 @@ import { StandaloneSearchBox, useJsApiLoader } from '@react-google-maps/api';
 import { createUser, getUserByEmail, createReport, getReportsByUserId } from '@/utils/db/actions';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-hot-toast';
+import { updateReportStatus } from '@/utils/db/actions';
 
 const geminiApiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
 const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
@@ -274,6 +275,23 @@ Respond in JSON format like this:
     }
   };
 
+  const handleFeedback = async (reportId, action) => {
+    try {
+      const status = action === 'confirm' ? 'closed' : 'pending'; // always lowercase
+      await updateReportStatus(reportId, status);
+
+      setReports((prev) =>
+        prev.map((r) =>
+          r.id === reportId ? { ...r, status } : r
+        )
+      );
+      toast.success(`Marked as ${status}`);
+    } catch (error) {
+      toast.error(`Failed to update status: ${error.message}`);
+    }
+  };
+
+
   useEffect(() => {
     const checkUserAndFetchReports = async () => {
       const email = localStorage.getItem('userEmail');
@@ -287,9 +305,10 @@ Respond in JSON format like this:
         const userReports = await getReportsByUserId(loggedInUser.id);
         const formattedReports = userReports.map((report) => ({
           ...report,
-          createdAt: new Date(report.createdAt).toISOString().split('T')[0],
+          createdAt: new Date(report.createdAt).toLocaleString(), // e.g., "6/30/2025, 3:45:00 PM"
           status: report.status || 'In Progress',
         }));
+
 
         setReports(formattedReports);
       } else {
@@ -464,10 +483,10 @@ Respond in JSON format like this:
           </Button>
 
           {verificationStatus === 'success' && (
-            <p className="text-green-600">Verification successful ✅</p>
+            <p className="text-green-600">Verification successful</p>
           )}
           {verificationStatus === 'failure' && (
-            <p className="text-red-600">Verification failed ❌</p>
+            <p className="text-red-600">Verification failed</p>
           )}
         </div>
 
@@ -518,10 +537,16 @@ Respond in JSON format like this:
                           ? 'bg-blue-100 text-blue-800'
                           : report.status === 'verified'
                             ? 'bg-green-100 text-green-800'
-                            : 'bg-gray-100 text-gray-800'
+                            : report.status === 'completed'
+                              ? 'bg-purple-100 text-purple-800'
+                              : report.status === 'closed'
+                                ? 'bg-green-200 text-green-900'
+                                : report.status === 'reopened'
+                                  ? 'bg-red-100 text-red-800'
+                                  : 'bg-gray-100 text-gray-800'
                         }`}
                     >
-                      {report.status.replace('_', ' ').toUpperCase()}
+                      {report.status.replace(/_/g, ' ').toUpperCase()}
                     </span>
                   </p>
                   <p className="text-sm text-gray-500">
@@ -535,11 +560,30 @@ Respond in JSON format like this:
                       hour12: true,
                     })}
                   </p>
+
+                  {/* Feedback buttons for 'completed_by_staff' status */}
+                  {report.status === 'completed' && (
+                    <div className="flex gap-4 mt-2">
+                      <button
+                        className="px-4 py-1 rounded bg-green-500 text-white hover:bg-green-600 transition"
+                        onClick={() => handleFeedback(report.id, 'confirm')}
+                      >
+                        Confirm Completion
+                      </button>
+                      <button
+                        className="px-4 py-1 rounded bg-red-500 text-white hover:bg-red-600 transition"
+                        onClick={() => handleFeedback(report.id, 'reopen')}
+                      >
+                        Request Reopen
+                      </button>
+                    </div>
+                  )}
                 </div>
               </li>
             ))}
           </ul>
         )}
+
 
         {/* Modal for image preview */}
         {previewImage && (

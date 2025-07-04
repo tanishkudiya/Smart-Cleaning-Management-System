@@ -13,6 +13,65 @@ import {
 } from './schema';
 import { eq, sql, and, desc } from 'drizzle-orm';
 
+
+export async function autoCloseExpiredReports() {
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000); // 24 hours ago
+
+  const expired = await db
+    .select()
+    .from(Reports)
+    .where(
+      and(
+        eq(Reports.status, "completed"),
+        lt(Reports.completedAt, cutoff)
+      )
+    );
+
+  for (const report of expired) {
+    await db
+      .update(Reports)
+      .set({ status: "closed" })
+      .where(eq(Reports.id, report.id));
+  }
+
+  return expired.length;
+}
+
+export async function updateTaskStatusByReportId(reportId, newStatus) {
+  try {
+    const result = await db
+      .update(tasks)
+      .set({ taskStatus: newStatus })
+      .where(eq(tasks.reportId, reportId));
+
+    if (newStatus === 'completed') {
+      await db.update(Reports)
+        .set({ completedAt: new Date() }) // assumes you added completedAt in schema
+        .where(eq(Reports.id, reportId));
+    }
+
+    return result.rowCount > 0;
+  } catch (error) {
+    console.error('Error updating task status:', error);
+    throw new Error('Failed to update task status');
+  }
+}
+
+export async function getReportsByUserId(userId) {
+  try {
+    const reports = await db
+      .select()
+      .from(Reports)
+      .where(eq(Reports.userId, userId));
+
+    return reports;
+  } catch (error) {
+    console.error('Error fetching reports by user:', error);
+    return [];
+  }
+}
+
 export async function getCompletedTasksByUserId(userId) {
   if (!userId) throw new Error("Invalid userId");
 
@@ -364,14 +423,14 @@ export async function createReport(userId, location, wasteType, amount, imageUrl
   }
 }
 
-export async function getReportsByUserId(userId) {
-  try {
-    return await db.select().from(Reports).where(eq(Reports.userId, userId)).execute();
-  } catch (error) {
-    console.error('Error fetching reports by userId:', error);
-    return [];
-  }
-}
+// export async function getReportsByUserId(userId) {
+//   try {
+//     return await db.select().from(Reports).where(eq(Reports.userId, userId)).execute();
+//   } catch (error) {
+//     console.error('Error fetching reports by userId:', error);
+//     return [];
+//   }
+// }
 
 export async function getOrCreateReward(userId) {
   try {
